@@ -1,0 +1,580 @@
+#!/usr/bin/python
+
+import subprocess, re, sys
+
+Pactl = "pactl"
+PactlList = "list"
+
+Pacmd = "pacmd"
+PacmdDump = "dump"
+PacmdSetSinkMute = "set-sink-mute"
+PacmdSetSinkInputMute = "set-sink-input-mute"
+PacmdMuted = "yes"
+PacmdMoveSinkInput = "move-sink-input"
+PacmdSetSinkVolume = "set-sink-volume"
+PacmdSetSinkInputVolume = "set-sink-input-volume"
+
+ItemsAll = "all"
+SinkDefaultName = "default"
+
+
+# According to pacmd anyhow, not sure if this is universal to all sinks
+VolNormal = 0x10000
+
+Null = 0
+
+########################################################
+
+class Sink:
+    def __init__(self, idnum, name, muted, volume):
+        self.idnum = idnum
+        self.name = name
+        self.muted = muted
+        self.volume = volume
+
+class SinkInput:
+    def __init__(self, idnum, appName, muted, volume):
+        self.idnum = idnum
+        self.appName = appName 
+        self.muted = muted
+        self.volume = volume
+
+####################################################
+
+class PulseInfo:
+    PulseBufSize = 1000
+
+    SinkRE = re.compile("Sink #([0-9]*)")
+    SinkIdGroup = 1
+    SinkNameRE = re.compile("\s*Name: (.*)")
+    SinkNameGroup = 1
+    SinkMutedRE = re.compile("\s*Mute: (.*)")
+    SinkMutedGroup = 1
+    SinkVolumePCRE = re.compile("\s*Volume:.* ([0-9]*)%.*")
+    SinkVolumePCGroup = 1
+
+    SinkInputRE = re.compile("Sink Input #([0-9]*)")
+    SinkInputIdGroup = 1
+    SinkInputAppNameRE = re.compile("\s*application.name = \"(.*)\"")
+    SinkInputAppNameGroup = 1
+    SinkInputMutedRE = SinkMutedRE
+    SinkInputMutedGroup = SinkMutedGroup
+    SinkInputVolumePCRE = SinkVolumePCRE
+    SinkInputVolumePCGroup = SinkVolumePCGroup
+
+    DefaultSinkRE = re.compile("set-default-sink (.*)")
+    DefaultSinkGroup = 1
+
+    def __init__(self):
+       self.sinks = []
+       self.sinkInputs = []
+       self.defaultSink = Null
+       self.getPulseInfo()
+
+    def getPulseInfo(self):
+        self.processSinksAndInputs()
+        self.processDefaultSink()
+
+    def processSinksAndInputs(self):
+        self.sinks = []
+        self.sinkInputs = []
+        rawData = subprocess.Popen([Pactl, PactlList], 
+                                   bufsize=self.PulseBufSize, 
+                                   stdout=subprocess.PIPE).stdout
+        try:
+            while 1:
+                line = rawData.next()
+                m = self.SinkRE.match(line)
+                if m:
+                    self.processSink(m.group(self.SinkIdGroup), rawData)
+                else:
+                    m = self.SinkInputRE.match(line)
+                    if m:
+                        self.processSinkInput(m.group(self.SinkInputIdGroup), rawData)
+        except StopIteration:
+            # done
+            pass
+
+    def processSink(self, idnum, rawData):
+        name = ""
+        muted = ""
+        volume = ""
+        while ((name == "") or 
+               (muted == "") or
+               (volume == "")): 
+            line = rawData.next()
+            if (name == ""):
+                m = self.SinkNameRE.match(line)
+                if m:
+                    name = m.group(self.SinkNameGroup)
+            if (muted == ""):
+                m = self.SinkMutedRE.match(line)
+                if m:
+                    muted = m.group(self.SinkMutedGroup)
+            if (volume == ""):
+                m = self.SinkVolumePCRE.match(line)
+                if m:
+                    volume = m.group(self.SinkVolumePCGroup)
+        self.sinks.append(Sink(idnum, 
+                               name, 
+                               muted == PacmdMuted,
+                               volume))
+
+    def processSinkInput(self, idnum, rawData):
+        appName = ""
+        muted = ""
+        volume = ""
+        while ((appName == "") or
+               (muted == "") or
+               (volume == "")):
+            line = rawData.next()
+            if (appName == ""):
+                m = self.SinkInputAppNameRE.match(line)
+                if m:
+                    appName = m.group(self.SinkInputAppNameGroup)
+            if (muted == ""):
+                m = self.SinkInputMutedRE.match(line)
+                if m:
+                    muted = m.group(self.SinkInputMutedGroup)
+            if (volume == ""):
+                m = self.SinkInputVolumePCRE.match(line)
+                if m:
+                    volume = m.group(self.SinkInputVolumePCGroup)
+        self.sinkInputs.append(SinkInput(idnum, 
+                                         appName, 
+                                         muted == PacmdMuted, 
+                                         volume))
+
+    def processDefaultSink(self):
+        # assumes we've run processSinksAndInputs, but if we don't have
+        # any sinks, make another attempt
+        if self.sinks == []:
+            self.processSinksAndInputs()
+
+        rawData = subprocess.Popen([Pacmd, PacmdDump], 
+                                   bufsize=self.PulseBufSize, 
+                                   stdout=subprocess.PIPE).stdout
+        try:
+            while 1:
+                line = rawData.next()
+                m = self.DefaultSinkRE.match(line)
+                if m:
+                    sinkName = m.group(self.DefaultSinkGroup)
+                    self.defaultSink = self.getSinkByName(sinkName)
+        except StopIteration:
+            # done
+            pass
+
+
+    def getSink(self, identifier):
+        sink = self.getSinkByName(identifier)
+        if (sink == Null):
+            sink = self.getSinkByIdnum(identifier)
+        return sink
+
+    def getSinkByName(self, name):
+        resSink = Null
+        for sink in self.sinks:
+            if sink.name == name:
+                resSink = sink
+                break
+        return sink
+
+    def getSinkByIdnum(self, idnum):
+        resSink = Null
+        for sink in self.sinks:
+            if sink.idnum == idnum:
+                resSink = sink
+                break
+        return resSink
+
+    def getSinkInput(self, identifier):
+        sinkInput = self.getSinkInputByAppName(identifier)
+        if (sinkInput == Null):
+            sinkInput = self.getSinkInputByIdnum(identifier)
+        return sinkInput
+                
+    def getSinkInputByAppName(self, appName):
+        resSinkInput = Null
+        for sinkInput in self.sinkInputs:
+            if sinkInput.appName == appName:
+                resSinkInput = sinkInput
+                break
+        return resSinkInput
+
+    def getSinkInputByIdnum(self, idnum):
+        resSinkInput = Null
+        for sinkInput in self.sinkInputs:
+            if sinkInput.idnum == idnum:
+                resSinkInput = sinkInput
+                break
+        return resSinkInput
+
+    def getSinkInputs(self):
+        return self.sinkInputs
+
+    def getSinks(self):
+        return self.sinks
+
+    def getDefaultSink(self):
+        return self.defaultSink
+
+
+########################################################
+
+class Actioneer:
+    Command = "specify a command name"
+    Options = "specify the options"
+    Does = "specify what the action does"
+
+    def __init__(self, pulseInfo, argv):
+        self.pulseInfo = pulseInfo
+        self.argv = argv
+
+    def go(self):
+        print "specify how to do the action"
+
+    def printSinkInputs(self):
+        for sinkInput in self.pulseInfo.getSinkInputs():
+            sys.stdout.write(sinkInput.idnum)
+            sys.stdout.write(") ")
+            sys.stdout.write(sinkInput.appName)
+            sys.stdout.write("\n")
+            sys.stdout.write(" (Volume: ")
+            sys.stdout.write(sinkInput.volume)
+            sys.stdout.write("%")
+            if sinkInput.muted:
+                sys.stdout.write(" [mute]")
+            sys.stdout.write(")\n")
+
+    def printSinks(self):
+        defaultSinkName = ""
+        defaultSink = self.pulseInfo.getDefaultSink()
+        if not (defaultSink == Null):
+            defaultSinkName = defaultSink.name
+
+        for sink in self.pulseInfo.getSinks():
+            sys.stdout.write(sink.idnum)
+            sys.stdout.write(") ")
+            sys.stdout.write(sink.name)
+            sys.stdout.write(" (Volume: ")
+            sys.stdout.write(sink.volume)
+            sys.stdout.write("%")
+            if sink.muted:
+                sys.stdout.write(" [mute]")
+            if sink.name == defaultSinkName:
+                sys.stdout.write(", Default")
+            sys.stdout.write(")\n")
+
+    def askSink(self):
+        sink = Null
+        sinks = self.pulseInfo.getSinks()
+        if (sinks == []):
+            print "No sinks available."
+        else:
+            self.printSinks()
+            sinkId = raw_input("Sink Id: ")
+            sink = pulseInfo.getSinkByIdnum(sinkId)
+            if (sink == Null):
+                print "Warning: no sink with that id exists."
+        return sink
+
+    def askSinkInput(self):
+        sinkInput = Null
+        sinkInputs = self.pulseInfo.getSinkInputs()
+        if (sinkInputs == []):
+            print "No sinks inputs available."
+        else:
+            self.printSinkInputs()
+            sinkInputId = raw_input("Sink Input Id: ")
+            sinkInput = pulseInfo.getSinkInputByIdnum(sinkInputId)
+            if (sinkInput == Null):
+                print "Warning: no sink input with that id exists."
+        return sinkInput
+
+
+
+
+########################################################
+
+class SinkChanger(Actioneer):
+    Command = "change-sink"
+    Options = "sink_input sink_name1 sink_name2 ..."
+    Does = "Changes sink_input (generally an app name, e.g. mpd) to an output.  Tries sink_names in order until one is found."
+    SinkInputIndex = 2
+    SinkStartIndex = 3
+
+    def go(self):
+        if len(self.argv) < 3:
+            self.doMenu()
+        else:
+            self.doCommandLine()
+
+    def doMenu(self):
+        sink = self.askSink()
+        sinkInput = self.askSinkInput()
+        self.doChange(sinkInput, sink)
+
+    def doCommandLine(self):
+        sinkInput = self.getSinkInput()
+        sink = self.getSink()
+        self.doChange(sinkInput, sink)
+
+    def getSinkInput(self):
+        sinkInputName = self.argv[self.SinkInputIndex]
+        return self.pulseInfo.getSinkInput(sinkInputName)
+
+    def getSink(self):
+        argIndex = self.SinkStartIndex
+        sink = Null
+        while (argIndex < len(self.argv)) and (sink == Null):
+            sinkName = self.argv[argIndex]
+            if sinkName == SinkDefaultName:
+                sink = self.pulseInfo.getDefaultSink()
+            else:
+                sink = self.pulseInfo.getSink(sinkName)
+            argIndex += 1
+        return sink
+         
+    def doChange(self, sinkInput, sink):
+        if (not (sinkInput == Null)) and (not (sink == Null)):
+            subprocess.Popen([Pacmd, 
+                              PacmdMoveSinkInput, 
+                              sinkInput.idnum,
+                              sink.idnum]).wait()
+        else:
+            print "Unknown sink or sink input."
+
+########################################################
+
+class ListAdjuster(Actioneer):
+    Options = "name1 name2 ..."
+    Does = "specify the adjust action on the names"
+
+    ListStartIndex = 2
+
+    def go(self):
+        index = self.ListStartIndex
+        if self.ListStartIndex >= len(self.argv):
+            self.doMenu()
+        else:
+            self.doCommandLine()
+
+    def doMenu(self):
+        item = self.doAsk()
+        self.doItemSling(item)
+
+    def doCommandLine(self):
+        index = self.ListStartIndex
+        while (index < len(self.argv)):
+            name = self.argv[index]
+            if (name == ItemsAll):
+                self.doAll()
+            else:
+                self.doOne(name)
+            index += 1
+
+    def doAll(self):
+        items = self.getItems()
+        for item in items:
+            self.doItemSling(item)
+
+    def doOne(self, name):
+        item = self.getItem(name)
+        self.doItemSling(item)
+
+    def doItemSling(self, item):
+        if not (item == Null):
+            self.doItem(item)
+        else:
+            print "Item not found."
+
+    def doAsk(self):
+        print "specify how to ask for an item"
+
+    def getItem(self):
+        print "specify how to get an item"
+
+    def getItems(self):
+        print "specify how to get all items"
+
+    def doItem(self, sink):
+        print "specify what to do with the sink"
+
+
+########################################################
+
+class SinkAdjuster(ListAdjuster):
+    Options = "sink_name1 sink_name2 ..."
+    Does = "specify the sink adjust action on the sink_names"
+
+    def doAsk(self):
+        return self.askSink()
+
+    def getItem(self, identifier):
+        return self.pulseInfo.getSink(identifier)
+
+    def getItems(self):
+        return self.pulseInfo.getSinks()
+
+    def doItem(self):
+        print "specify what to do with the sink"
+
+########################################################
+
+class SinkInputAdjuster(ListAdjuster):
+    Options = "sink_input_name1 sink_input_name2 ..."
+    Does = "specify the sink input adjust action on the sink_input_names"
+
+    def doAsk(self):
+        return self.askSinkInput()
+
+    def getItem(self, identifier):
+        return self.pulseInfo.getSinkInput(identifier)
+
+    def getItems(self):
+        return self.pulseInfo.getSinkInputs()
+
+    def doItem(self):
+        print "specify what to do with the sink inputs"
+
+
+########################################################
+
+# designed as a doItem implementer for SinkAdjuster or SinkInputAdjuster
+class MuteToggler:
+    PacmdSetMuteCommand = "specify the mute toggle command"    
+
+    def doItem(self, sink):
+        if not (sink == Null): 
+            mute = "yes"
+            if sink.muted:
+                mute = "no"
+            subprocess.Popen([Pacmd, self.PacmdSetMuteCommand, sink.idnum, mute]).wait()
+
+########################################################
+
+class SinkToggleMute(MuteToggler, SinkAdjuster):
+    Command = "toggle-mute"
+    Does = "Toggles mute on sink_names if found."
+    PacmdSetMuteCommand = PacmdSetSinkMute
+
+########################################################
+
+class SinkInputToggleMute(MuteToggler, SinkInputAdjuster):
+    Command = "input-toggle-mute"
+    Does = "Toggles mute on sink_input_names if found."
+    PacmdSetMuteCommand = PacmdSetSinkInputMute
+
+########################################################
+
+# designed as a doItem implementer for SinkAdjuster or SinkInputAdjuster
+class VolumeAdjuster:
+    PCChange = 0
+    PacmdSetCommand = "specify volume set command"
+
+    def doItem(self, sink):
+        volume = int(sink.volume) + self.PCChange
+        absVol = str(volume * VolNormal / 100)
+        subprocess.Popen([Pacmd, self.PacmdSetCommand, sink.idnum, absVol]).wait()
+
+########################################################
+
+class SinkVolumeUp(VolumeAdjuster, SinkAdjuster):
+    Command = "volume-up"
+    Does = "Increases volume on sink_names by 5%."
+    PCChange = 5
+    PacmdSetCommand = PacmdSetSinkVolume
+
+########################################################
+
+class SinkInputVolumeUp(VolumeAdjuster, SinkInputAdjuster):
+    Command = "input-volume-up"
+    Does = "Increases volume on sink_input_names by 5%."
+    PCChange = 5
+    PacmdSetCommand = PacmdSetSinkInputVolume
+
+########################################################
+
+class SinkVolumeDown(VolumeAdjuster, SinkAdjuster):
+    Command = "volume-down"
+    Does = "Decreases volume on sink_names by 5%."
+    PCChange = -5
+    PacmdSetCommand = PacmdSetSinkVolume
+
+
+########################################################
+
+class SinkInputVolumeDown(VolumeAdjuster, SinkInputAdjuster):
+    Command = "input-volume-down"
+    Does = "Decreases volume on sink_input_names by 5%."
+    PCChange = -5
+    PacmdSetCommand = PacmdSetSinkInputVolume
+
+########################################################
+
+class Lister(Actioneer):
+    Command = "list"
+    Options = ""
+    Does = "Lists available sinks and sink inputs with info."
+
+    def go(self):
+        print "Sinks:\n"
+        self.printSinks()
+        print "\nSink Inputs:\n"
+        self.printSinkInputs()
+  
+########################################################
+
+ActioneerList = [SinkChanger, 
+                 SinkToggleMute, 
+                 SinkVolumeUp, 
+                 SinkVolumeDown, 
+                 SinkInputToggleMute, 
+                 SinkInputVolumeUp, 
+                 SinkInputVolumeDown, 
+                 Lister]
+
+########################################################
+
+class CommandDispatcher:
+    def __init__(self, pulseInfo, argv):
+        self.argv = argv
+        self.pulseInfo = pulseInfo
+        self.actioneers = []
+        for actioneer in ActioneerList:
+            self.actioneers.append(actioneer(pulseInfo, argv))
+
+    def go(self):
+        arg_len = len(self.argv)
+        done = 0
+        if (arg_len >= 2):
+            command = self.argv[1]
+            if not (command == "help"):
+                for actioneer in self.actioneers:
+                    if command == actioneer.Command:
+                        actioneer.go()
+                        done = 1
+                if (not done):
+                    print "Command", command, "not recognised."
+        if (not done):
+            self.doHelp()
+
+                
+    def doHelp(self):
+        print "Usage: pulse-ctrl command options"
+        print "Note: special names are", ItemsAll, "and", SinkDefaultName, "(sink).  Names can also be id numbers"
+        for actioneer in self.actioneers:
+            print 
+            print "Command:", actioneer.Command
+            print "Options:", actioneer.Options
+            print "Does:", actioneer.Does
+
+    
+
+########################################################
+
+pulseInfo = PulseInfo() 
+dispatcher = CommandDispatcher(pulseInfo, sys.argv)
+dispatcher.go()
+
