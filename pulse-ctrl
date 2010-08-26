@@ -17,7 +17,6 @@ PacmdSetSinkInputVolume = "set-sink-input-volume"
 ItemsAll = "all"
 SinkDefaultName = "default"
 
-
 # According to pacmd anyhow, not sure if this is universal to all sinks
 VolNormal = 0x10000
 
