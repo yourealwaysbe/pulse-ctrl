@@ -424,7 +424,6 @@ class ListAdjuster(Actioneer):
     ListStartIndex = 2
 
     def go(self):
-        index = self.ListStartIndex
         if self.ListStartIndex >= len(self.argv):
             self.doMenu()
         else:
@@ -593,7 +592,48 @@ class Lister(Actioneer):
         self.printSinks()
         print "\nSink Inputs:\n"
         self.printSinkInputs()
-  
+
+########################################################
+
+class HasSink(Actioneer):
+    Command = "has-sink"
+    Options = "sink_name"
+    Does = "Prints 'yes' if the given sink exists"
+
+    SinkNameIndex = 2
+
+    def go(self):
+        if self.SinkNameIndex >= len(self.argv):
+            print "Please specify a sink_name (see help)"
+        else:
+            sinkArg = self.argv[self.SinkNameIndex]
+            sink = self.pulseInfo.getSink(sinkArg)
+            if not (sink == Null):
+                print "yes"
+            else:
+                print "no"
+
+########################################################
+
+class HasSinkInput(Actioneer):
+    Command = "has-sink-input"
+    Options = "sink_input_name"
+    Does = "Prints 'yes' if the given sink input exists"
+
+    SinkInputNameIndex = 2
+
+    def go(self):
+        if self.SinkInputNameIndex >= len(self.argv):
+            print "Please specify a sink_name (see help)"
+        else:
+            sinkInputArg = self.argv[self.SinkInputNameIndex]
+            sinkInput = self.pulseInfo.getSinkInput(sinkInputArg)
+            if not (sinkInput == Null):
+                print "yes"
+            else:
+                print "no"
+
+
 ########################################################
 
 ActioneerList = [SinkChanger, 
@@ -604,7 +644,9 @@ ActioneerList = [SinkChanger,
                  SinkInputToggleMute, 
                  SinkInputVolumeUp, 
                  SinkInputVolumeDown, 
-                 Lister]
+                 Lister,
+                 HasSink,
+                 HasSinkInput]
 
 ########################################################
 
