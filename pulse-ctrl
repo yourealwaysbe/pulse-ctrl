@@ -32,11 +32,12 @@ class Sink:
         self.volume = volume
 
 class SinkInput:
-    def __init__(self, idnum, appName, muted, volume):
+    def __init__(self, idnum, appName, muted, volume, sink):
         self.idnum = idnum
         self.appName = appName 
         self.muted = muted
         self.volume = volume
+        self.sink = sink
 
 ####################################################
 
@@ -60,7 +61,8 @@ class PulseInfo:
     SinkInputMutedGroup = SinkMutedGroup
     SinkInputVolumePCRE = SinkVolumePCRE
     SinkInputVolumePCGroup = SinkVolumePCGroup
-
+    SinkInputSinkRE = re.compile("\s*Sink: ([0-9]*)")
+    SinkInputSinkGroup = 1
     DefaultSinkRE = re.compile("set-default-sink (.*)")
     DefaultSinkGroup = 1
 
@@ -94,6 +96,15 @@ class PulseInfo:
             # done
             pass
 
+    def condMatchReg(self, saveString, matchLine, re, group):
+        if saveString == "":
+            m = re.match(matchLine)
+            if m:
+                saveString = m.group(group)
+
+        return saveString
+            
+
     def processSink(self, idnum, rawData):
         name = ""
         muted = ""
@@ -102,47 +113,55 @@ class PulseInfo:
                (muted == "") or
                (volume == "")): 
             line = rawData.next()
-            if (name == ""):
-                m = self.SinkNameRE.match(line)
-                if m:
-                    name = m.group(self.SinkNameGroup)
-            if (muted == ""):
-                m = self.SinkMutedRE.match(line)
-                if m:
-                    muted = m.group(self.SinkMutedGroup)
-            if (volume == ""):
-                m = self.SinkVolumePCRE.match(line)
-                if m:
-                    volume = m.group(self.SinkVolumePCGroup)
+            name = self.condMatchReg(name, 
+                                     line, 
+                                     self.SinkNameRE, 
+                                     self.SinkNameGroup)
+            muted = self.condMatchReg(muted, 
+                                      line, 
+                                      self.SinkMutedRE, 
+                                      self.SinkMutedGroup)
+            volume = self.condMatchReg(volume, 
+                                       line, 
+                                       self.SinkVolumePCRE, 
+                                       self.SinkVolumePCGroup)
         self.sinks.append(Sink(idnum, 
                                name, 
                                muted == PacmdMuted,
                                volume))
 
+
     def processSinkInput(self, idnum, rawData):
         appName = ""
         muted = ""
         volume = ""
+        sink = ""
         while ((appName == "") or
                (muted == "") or
-               (volume == "")):
+               (volume == "") or
+               (sink == "")):
             line = rawData.next()
-            if (appName == ""):
-                m = self.SinkInputAppNameRE.match(line)
-                if m:
-                    appName = m.group(self.SinkInputAppNameGroup)
-            if (muted == ""):
-                m = self.SinkInputMutedRE.match(line)
-                if m:
-                    muted = m.group(self.SinkInputMutedGroup)
-            if (volume == ""):
-                m = self.SinkInputVolumePCRE.match(line)
-                if m:
-                    volume = m.group(self.SinkInputVolumePCGroup)
+            appName = self.condMatchReg(appName, 
+                                        line, 
+                                        self.SinkInputAppNameRE, 
+                                        self.SinkInputAppNameGroup)
+            muted = self.condMatchReg(muted, 
+                                      line, 
+                                      self.SinkInputMutedRE, 
+                                      self.SinkInputMutedGroup)
+            volume = self.condMatchReg(volume, 
+                                       line, 
+                                       self.SinkInputVolumePCRE, 
+                                       self.SinkInputVolumePCGroup)
+            sink = self.condMatchReg(sink,  
+                                     line, 
+                                     self.SinkInputSinkRE, 
+                                     self.SinkInputSinkGroup)
         self.sinkInputs.append(SinkInput(idnum, 
                                          appName, 
                                          muted == PacmdMuted, 
-                                         volume))
+                                         volume,
+                                         sink))
 
     def processDefaultSink(self):
         # assumes we've run processSinksAndInputs, but if we don't have
@@ -156,10 +175,11 @@ class PulseInfo:
         try:
             while 1:
                 line = rawData.next()
-                m = self.DefaultSinkRE.match(line)
-                if m:
-                    sinkName = m.group(self.DefaultSinkGroup)
-                    self.defaultSink = self.getSinkByName(sinkName)
+                if self.defaultSink == Null:
+                    m = self.DefaultSinkRE.match(line)
+                    if m:
+                        sinkName = m.group(self.DefaultSinkGroup)
+                        self.defaultSink = self.getSinkByName(sinkName)
         except StopIteration:
             # done
             pass
@@ -173,11 +193,14 @@ class PulseInfo:
 
     def getSinkByName(self, name):
         resSink = Null
-        for sink in self.sinks:
-            if sink.name == name:
-                resSink = sink
-                break
-        return sink
+        if name == SinkDefaultName:
+            resSink = self.defaultSink
+        else:
+            for sink in self.sinks:
+                if sink.name == name:
+                    resSink = sink
+                    break
+        return resSink
 
     def getSinkByIdnum(self, idnum):
         resSink = Null
@@ -244,6 +267,8 @@ class Actioneer:
             sys.stdout.write("%")
             if sinkInput.muted:
                 sys.stdout.write(" [mute]")
+            sys.stdout.write(", Sink: ")
+            sys.stdout.write(sinkInput.sink)
             sys.stdout.write(")\n")
 
     def printSinks(self):
@@ -343,6 +368,52 @@ class SinkChanger(Actioneer):
                               sink.idnum]).wait()
         else:
             print "Unknown sink or sink input."
+
+########################################################
+
+class SinkToggler(Actioneer):
+    Command = "toggle-sink"
+    Options = "sink_input sink_name1 sink_name2"
+    Does = "Toggles sink_input (generally an app name, e.g. mpd) between two outputs."
+    SinkInputIndex = 2
+    SinkFirstIndex = 3
+    SinkSecondIndex = 4
+
+    def go(self):
+        if len(self.argv) < 5:
+            self.doMenu()
+        else:
+            self.doCommandLine()
+
+    def doMenu(self):
+        sinkInput = self.askSinkInput()
+        sink1 = self.askSink()
+        sink2 = self.askSink()
+        self.doChange(sinkInput, sink1, sink2)
+
+    def doCommandLine(self):
+        sinkInput = self.pulseInfo.getSinkInput(self.argv[self.SinkInputIndex])
+        sink1 = self.pulseInfo.getSink(self.argv[self.SinkFirstIndex])
+        sink2 = self.pulseInfo.getSink(self.argv[self.SinkSecondIndex])
+        self.doChange(sinkInput, sink1, sink2)
+
+    def doChange(self, sinkInput, sink1, sink2):
+        if ((not (sinkInput == Null)) and 
+            (not (sink1 == Null)) and
+            (not (sink2 == Null))):
+            if not (sinkInput.sink == sink1.idnum):
+                subprocess.Popen([Pacmd, 
+                                  PacmdMoveSinkInput, 
+                                  sinkInput.idnum,
+                                  sink1.idnum]).wait()
+            else:
+                subprocess.Popen([Pacmd, 
+                                  PacmdMoveSinkInput, 
+                                  sinkInput.idnum,
+                                  sink2.idnum]).wait()
+        else:
+            print "Unknown sink or sink input."
+
 
 ########################################################
 
@@ -526,6 +597,7 @@ class Lister(Actioneer):
 ########################################################
 
 ActioneerList = [SinkChanger, 
+                 SinkToggler,
                  SinkToggleMute, 
                  SinkVolumeUp, 
                  SinkVolumeDown, 
