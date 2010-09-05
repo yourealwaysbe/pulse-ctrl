@@ -546,6 +546,7 @@ class VolumeAdjuster:
         volume = int(sink.volume) + self.PCChange
         absVol = str(volume * VolNormal / 100)
         subprocess.Popen([Pacmd, self.PacmdSetCommand, sink.idnum, absVol]).wait()
+            
 
 ########################################################
 
@@ -579,6 +580,57 @@ class SinkInputVolumeDown(VolumeAdjuster, SinkInputAdjuster):
     Does = "Decreases volume on sink_input_names by 5%."
     PCChange = -5
     PacmdSetCommand = PacmdSetSinkInputVolume
+
+########################################################
+
+# designed as a doItem implementer for SinkAdjuster or SinkInputAdjuster
+class AbsVolumeAdjuster:
+    PacmdSetCommand = "specify volume set command"
+
+    VolumePCIndex = 2
+    DefaultVolume = 50
+    # ListStart is different...
+    ListStartIndex = 3
+
+    def doItem(self, sink):
+        volume = self.getVolume()
+        absVol = str(volume * VolNormal / 100)
+        subprocess.Popen([Pacmd, self.PacmdSetCommand, sink.idnum, absVol]).wait()
+
+    def getVolume(self):
+        volume = ""
+        if (len(self.argv) <= self.VolumePCIndex):
+            volume = int(raw_input("Volume: "))
+        else:
+            volume = self.argv[self.VolumePCIndex]
+        intVol = 0
+        try:
+            intVol = int(volume)
+        except ValueError:
+            print "Error reading volume percent, defaulting to", DefaultVolume
+            intVol = self.DefaultVolume
+        return intVol
+
+
+            
+
+
+########################################################
+
+class AbsSinkVolume(AbsVolumeAdjuster, SinkAdjuster):
+    Command = "set-volume"
+    Options = "percent sink_name1 sink_name2 ..."
+    Does = "Sets sink volume on sink_names by to given percent."
+    PacmdSetCommand = PacmdSetSinkVolume
+
+########################################################
+
+class AbsSinkInputVolume(AbsVolumeAdjuster, SinkInputAdjuster):
+    Command = "set-input-volume"
+    Options = "percent sink_input_name1 sink_input_name2 ..."
+    Does = "Sets volume on sink_input_names to given percent."
+    PacmdSetCommand = PacmdSetSinkInputVolume
+
 
 ########################################################
 
@@ -646,7 +698,9 @@ ActioneerList = [SinkChanger,
                  SinkInputVolumeDown, 
                  Lister,
                  HasSink,
-                 HasSinkInput]
+                 HasSinkInput,
+                 AbsSinkVolume,
+                 AbsSinkInputVolume]
 
 ########################################################
 
