@@ -607,7 +607,7 @@ class AbsVolumeAdjuster:
         try:
             intVol = int(volume)
         except ValueError:
-            print "Error reading volume percent, defaulting to", DefaultVolume
+            print "Error reading volume percent, defaulting to", self.DefaultVolume
             intVol = self.DefaultVolume
         return intVol
 
