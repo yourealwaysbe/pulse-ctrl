@@ -329,7 +329,7 @@ class SinkChanger(Actioneer):
     SinkStartIndex = 3
 
     def go(self):
-        if len(self.argv) < 3:
+        if len(self.argv) < self.SinkStartIndex:
             self.doMenu()
         else:
             self.doCommandLine()
@@ -685,6 +685,39 @@ class HasSinkInput(Actioneer):
             else:
                 print "no"
 
+########################################################
+
+class SinkInputSinker(Actioneer):
+    Command = "get-sink"
+    Options = "sink_input"
+    Does = "Prints name of sink associated to sink_input"
+    SinkInputIndex = 2
+
+    def go(self):
+        if len(self.argv) <= self.SinkInputIndex:
+            self.doMenu()
+        else:
+            self.doCommandLine()
+
+    def doMenu(self):
+        sinkInput = self.askSinkInput()
+        self.doInfo(sinkInput)
+
+    def doCommandLine(self):
+        sinkInput = self.getSinkInput()
+        self.doInfo(sinkInput)
+
+    def getSinkInput(self):
+        sinkInputName = self.argv[self.SinkInputIndex]
+        return self.pulseInfo.getSinkInput(sinkInputName)
+
+    def doInfo(self, sinkInput):
+        if (not (sinkInput == Null)):
+            sink = self.pulseInfo.getSink(sinkInput.sink)
+            print sink.name
+        else:
+            print "Unknown sink or sink input."
+
 
 ########################################################
 
@@ -700,7 +733,8 @@ ActioneerList = [SinkChanger,
                  HasSink,
                  HasSinkInput,
                  AbsSinkVolume,
-                 AbsSinkInputVolume]
+                 AbsSinkInputVolume,
+                 SinkInputSinker]
 
 ########################################################
 
