@@ -44,26 +44,26 @@ class SinkInput:
 class PulseInfo:
     PulseBufSize = 1000
 
-    SinkRE = re.compile("Sink #([0-9]*)")
+    SinkRE = re.compile("Sink #([0-9]*)$")
     SinkIdGroup = 1
-    SinkNameRE = re.compile("\s*Name: (.*)")
+    SinkNameRE = re.compile("\s*Name: (.*)$")
     SinkNameGroup = 1
-    SinkMutedRE = re.compile("\s*Mute: (.*)")
+    SinkMutedRE = re.compile("\s*Mute: (.*)$")
     SinkMutedGroup = 1
-    SinkVolumePCRE = re.compile("\s*Volume:.* ([0-9]*)%.*")
+    SinkVolumePCRE = re.compile("\s*Volume:.* ([0-9]*)%.*$")
     SinkVolumePCGroup = 1
 
-    SinkInputRE = re.compile("Sink Input #([0-9]*)")
+    SinkInputRE = re.compile("Sink Input #([0-9]*)$")
     SinkInputIdGroup = 1
-    SinkInputAppNameRE = re.compile("\s*application.name = \"(.*)\"")
+    SinkInputAppNameRE = re.compile("\s*application.name = \"(.*)\"$")
     SinkInputAppNameGroup = 1
     SinkInputMutedRE = SinkMutedRE
     SinkInputMutedGroup = SinkMutedGroup
     SinkInputVolumePCRE = SinkVolumePCRE
     SinkInputVolumePCGroup = SinkVolumePCGroup
-    SinkInputSinkRE = re.compile("\s*Sink: ([0-9]*)")
+    SinkInputSinkRE = re.compile("\s*Sink: ([0-9]*)$")
     SinkInputSinkGroup = 1
-    DefaultSinkRE = re.compile("set-default-sink (.*)")
+    DefaultSinkRE = re.compile("set-default-sink (.*)$")
     DefaultSinkGroup = 1
 
     def __init__(self):
@@ -82,19 +82,16 @@ class PulseInfo:
         rawData = subprocess.Popen([Pactl, PactlList], 
                                    bufsize=self.PulseBufSize, 
                                    stdout=subprocess.PIPE).stdout
-        try:
-            while 1:
-                line = rawData.next()
-                m = self.SinkRE.match(line)
+        line = "blah"
+        while len(line) > 0:
+            line = rawData.readline().decode("utf-8")
+            m = self.SinkRE.match(line)
+            if m:
+                self.processSink(m.group(self.SinkIdGroup), rawData)
+            else:
+                m = self.SinkInputRE.match(line)
                 if m:
-                    self.processSink(m.group(self.SinkIdGroup), rawData)
-                else:
-                    m = self.SinkInputRE.match(line)
-                    if m:
-                        self.processSinkInput(m.group(self.SinkInputIdGroup), rawData)
-        except StopIteration:
-            # done
-            pass
+                    self.processSinkInput(m.group(self.SinkInputIdGroup), rawData)
 
     def condMatchReg(self, saveString, matchLine, re, group):
         if saveString == "":
@@ -112,7 +109,7 @@ class PulseInfo:
         while ((name == "") or 
                (muted == "") or
                (volume == "")): 
-            line = rawData.next()
+            line = rawData.readline().decode("utf-8")
             name = self.condMatchReg(name, 
                                      line, 
                                      self.SinkNameRE, 
@@ -140,7 +137,7 @@ class PulseInfo:
                (muted == "") or
                (volume == "") or
                (sink == "")):
-            line = rawData.next()
+            line = rawData.readline().decode("utf-8")
             appName = self.condMatchReg(appName, 
                                         line, 
                                         self.SinkInputAppNameRE, 
@@ -172,17 +169,14 @@ class PulseInfo:
         rawData = subprocess.Popen([Pacmd, PacmdDump], 
                                    bufsize=self.PulseBufSize, 
                                    stdout=subprocess.PIPE).stdout
-        try:
-            while 1:
-                line = rawData.next()
-                if self.defaultSink == Null:
-                    m = self.DefaultSinkRE.match(line)
-                    if m:
-                        sinkName = m.group(self.DefaultSinkGroup)
-                        self.defaultSink = self.getSinkByName(sinkName)
-        except StopIteration:
-            # done
-            pass
+        line = "blah"
+        while len(line) > 0:
+            line = rawData.readline().decode("utf-8")
+            if self.defaultSink == Null:
+                m = self.DefaultSinkRE.match(line)
+                if m:
+                    sinkName = m.group(self.DefaultSinkGroup)
+                    self.defaultSink = self.getSinkByName(sinkName)
 
 
     def getSink(self, identifier):
@@ -254,7 +248,7 @@ class Actioneer:
         self.argv = argv
 
     def go(self):
-        print "specify how to do the action"
+        print("specify how to do the action")
 
     def printSinkInputs(self):
         for sinkInput in self.pulseInfo.getSinkInputs():
@@ -294,26 +288,26 @@ class Actioneer:
         sink = Null
         sinks = self.pulseInfo.getSinks()
         if (sinks == []):
-            print "No sinks available."
+            print("No sinks available.")
         else:
             self.printSinks()
             sinkId = raw_input("Sink Id: ")
             sink = pulseInfo.getSinkByIdnum(sinkId)
             if (sink == Null):
-                print "Warning: no sink with that id exists."
+                print("Warning: no sink with that id exists.")
         return sink
 
     def askSinkInput(self):
         sinkInput = Null
         sinkInputs = self.pulseInfo.getSinkInputs()
         if (sinkInputs == []):
-            print "No sinks inputs available."
+            print("No sinks inputs available.")
         else:
             self.printSinkInputs()
             sinkInputId = raw_input("Sink Input Id: ")
             sinkInput = pulseInfo.getSinkInputByIdnum(sinkInputId)
             if (sinkInput == Null):
-                print "Warning: no sink input with that id exists."
+                print("Warning: no sink input with that id exists.")
         return sinkInput
 
 
@@ -367,7 +361,7 @@ class SinkChanger(Actioneer):
                               sinkInput.idnum,
                               sink.idnum]).wait()
         else:
-            print "Unknown sink or sink input."
+            print("Unknown sink or sink input.")
 
 ########################################################
 
@@ -412,7 +406,7 @@ class SinkToggler(Actioneer):
                                   sinkInput.idnum,
                                   sink2.idnum]).wait()
         else:
-            print "Unknown sink or sink input."
+            print("Unknown sink or sink input.")
 
 
 ########################################################
@@ -456,19 +450,19 @@ class ListAdjuster(Actioneer):
         if not (item == Null):
             self.doItem(item)
         else:
-            print "Item not found."
+            print("Item not found.")
 
     def doAsk(self):
-        print "specify how to ask for an item"
+        print("specify how to ask for an item")
 
     def getItem(self):
-        print "specify how to get an item"
+        print("specify how to get an item")
 
     def getItems(self):
-        print "specify how to get all items"
+        print("specify how to get all items")
 
     def doItem(self, sink):
-        print "specify what to do with the sink"
+        print("specify what to do with the sink")
 
 
 ########################################################
@@ -487,7 +481,7 @@ class SinkAdjuster(ListAdjuster):
         return self.pulseInfo.getSinks()
 
     def doItem(self):
-        print "specify what to do with the sink"
+        print("specify what to do with the sink")
 
 ########################################################
 
@@ -505,7 +499,7 @@ class SinkInputAdjuster(ListAdjuster):
         return self.pulseInfo.getSinkInputs()
 
     def doItem(self):
-        print "specify what to do with the sink inputs"
+        print("specify what to do with the sink inputs")
 
 
 ########################################################
@@ -553,7 +547,7 @@ class VolumeAdjuster:
 class SinkVolumeUp(VolumeAdjuster, SinkAdjuster):
     Command = "volume-up"
     Does = "Increases volume on sink_names by 5%."
-    PCChange = 5
+    PCChange = 10
     PacmdSetCommand = PacmdSetSinkVolume
 
 ########################################################
@@ -561,7 +555,7 @@ class SinkVolumeUp(VolumeAdjuster, SinkAdjuster):
 class SinkInputVolumeUp(VolumeAdjuster, SinkInputAdjuster):
     Command = "input-volume-up"
     Does = "Increases volume on sink_input_names by 5%."
-    PCChange = 5
+    PCChange = 10 
     PacmdSetCommand = PacmdSetSinkInputVolume
 
 ########################################################
@@ -569,7 +563,7 @@ class SinkInputVolumeUp(VolumeAdjuster, SinkInputAdjuster):
 class SinkVolumeDown(VolumeAdjuster, SinkAdjuster):
     Command = "volume-down"
     Does = "Decreases volume on sink_names by 5%."
-    PCChange = -5
+    PCChange = -10
     PacmdSetCommand = PacmdSetSinkVolume
 
 
@@ -578,7 +572,7 @@ class SinkVolumeDown(VolumeAdjuster, SinkAdjuster):
 class SinkInputVolumeDown(VolumeAdjuster, SinkInputAdjuster):
     Command = "input-volume-down"
     Does = "Decreases volume on sink_input_names by 5%."
-    PCChange = -5
+    PCChange = -10
     PacmdSetCommand = PacmdSetSinkInputVolume
 
 ########################################################
@@ -607,7 +601,7 @@ class AbsVolumeAdjuster:
         try:
             intVol = int(volume)
         except ValueError:
-            print "Error reading volume percent, defaulting to", self.DefaultVolume
+            print("Error reading volume percent, defaulting to", self.DefaultVolume)
             intVol = self.DefaultVolume
         return intVol
 
@@ -640,9 +634,9 @@ class Lister(Actioneer):
     Does = "Lists available sinks and sink inputs with info."
 
     def go(self):
-        print "Sinks:\n"
+        print("Sinks:\n")
         self.printSinks()
-        print "\nSink Inputs:\n"
+        print("\nSink Inputs:\n")
         self.printSinkInputs()
 
 ########################################################
@@ -656,14 +650,14 @@ class HasSink(Actioneer):
 
     def go(self):
         if self.SinkNameIndex >= len(self.argv):
-            print "Please specify a sink_name (see help)"
+            print("Please specify a sink_name (see help)")
         else:
             sinkArg = self.argv[self.SinkNameIndex]
             sink = self.pulseInfo.getSink(sinkArg)
             if not (sink == Null):
-                print "yes"
+                print("yes")
             else:
-                print "no"
+                print("no")
 
 ########################################################
 
@@ -676,14 +670,14 @@ class HasSinkInput(Actioneer):
 
     def go(self):
         if self.SinkInputNameIndex >= len(self.argv):
-            print "Please specify a sink_name (see help)"
+            print("Please specify a sink_name (see help)")
         else:
             sinkInputArg = self.argv[self.SinkInputNameIndex]
             sinkInput = self.pulseInfo.getSinkInput(sinkInputArg)
             if not (sinkInput == Null):
-                print "yes"
+                print("yes")
             else:
-                print "no"
+                print("no")
 
 ########################################################
 
@@ -714,9 +708,9 @@ class SinkInputSinker(Actioneer):
     def doInfo(self, sinkInput):
         if (not (sinkInput == Null)):
             sink = self.pulseInfo.getSink(sinkInput.sink)
-            print sink.name
+            print(sink.name)
         else:
-            print "Unknown sink or sink input."
+            print("Unknown sink or sink input.")
 
 
 ########################################################
@@ -757,19 +751,19 @@ class CommandDispatcher:
                         actioneer.go()
                         done = 1
                 if (not done):
-                    print "Command", command, "not recognised."
+                    print("Command", command, "not recognised.")
         if (not done):
             self.doHelp()
 
                 
     def doHelp(self):
-        print "Usage: pulse-ctrl command options"
-        print "Note: special names are", ItemsAll, "and", SinkDefaultName, "(sink).  Names can also be id numbers"
+        print("Usage: pulse-ctrl command options")
+        print("Note: special names are", ItemsAll, "and", SinkDefaultName, "(sink).  Names can also be id numbers")
         for actioneer in self.actioneers:
-            print 
-            print "Command:", actioneer.Command
-            print "Options:", actioneer.Options
-            print "Does:", actioneer.Does
+            print()
+            print("Command:", actioneer.Command)
+            print("Options:", actioneer.Options)
+            print("Does:", actioneer.Does)
 
     
 
