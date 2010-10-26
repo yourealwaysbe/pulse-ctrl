@@ -291,7 +291,8 @@ class Actioneer:
             print("No sinks available.")
         else:
             self.printSinks()
-            sinkId = raw_input("Sink Id: ")
+            print("Sink Id: ")
+            sinkId = input()
             sink = pulseInfo.getSinkByIdnum(sinkId)
             if (sink == Null):
                 print("Warning: no sink with that id exists.")
@@ -304,7 +305,8 @@ class Actioneer:
             print("No sinks inputs available.")
         else:
             self.printSinkInputs()
-            sinkInputId = raw_input("Sink Input Id: ")
+            print("Sink Input Id: ")
+            sinkInputId = input()
             sinkInput = pulseInfo.getSinkInputByIdnum(sinkInputId)
             if (sinkInput == Null):
                 print("Warning: no sink input with that id exists.")
@@ -538,7 +540,7 @@ class VolumeAdjuster:
 
     def doItem(self, sink):
         volume = int(sink.volume) + self.PCChange
-        absVol = str(volume * VolNormal / 100)
+        absVol = str(int(volume * VolNormal / 100))
         subprocess.Popen([Pacmd, self.PacmdSetCommand, sink.idnum, absVol]).wait()
             
 
@@ -546,7 +548,7 @@ class VolumeAdjuster:
 
 class SinkVolumeUp(VolumeAdjuster, SinkAdjuster):
     Command = "volume-up"
-    Does = "Increases volume on sink_names by 5%."
+    Does = "Increases volume on sink_names by 10%."
     PCChange = 10
     PacmdSetCommand = PacmdSetSinkVolume
 
@@ -554,7 +556,7 @@ class SinkVolumeUp(VolumeAdjuster, SinkAdjuster):
 
 class SinkInputVolumeUp(VolumeAdjuster, SinkInputAdjuster):
     Command = "input-volume-up"
-    Does = "Increases volume on sink_input_names by 5%."
+    Does = "Increases volume on sink_input_names by 10%."
     PCChange = 10 
     PacmdSetCommand = PacmdSetSinkInputVolume
 
@@ -562,7 +564,7 @@ class SinkInputVolumeUp(VolumeAdjuster, SinkInputAdjuster):
 
 class SinkVolumeDown(VolumeAdjuster, SinkAdjuster):
     Command = "volume-down"
-    Does = "Decreases volume on sink_names by 5%."
+    Does = "Decreases volume on sink_names by 10%."
     PCChange = -10
     PacmdSetCommand = PacmdSetSinkVolume
 
@@ -571,7 +573,7 @@ class SinkVolumeDown(VolumeAdjuster, SinkAdjuster):
 
 class SinkInputVolumeDown(VolumeAdjuster, SinkInputAdjuster):
     Command = "input-volume-down"
-    Does = "Decreases volume on sink_input_names by 5%."
+    Does = "Decreases volume on sink_input_names by 10%."
     PCChange = -10
     PacmdSetCommand = PacmdSetSinkInputVolume
 
@@ -594,7 +596,8 @@ class AbsVolumeAdjuster:
     def getVolume(self):
         volume = ""
         if (len(self.argv) <= self.VolumePCIndex):
-            volume = int(raw_input("Volume: "))
+            print("Volume: ")
+            volume = int(input("Volume: "))
         else:
             volume = self.argv[self.VolumePCIndex]
         intVol = 0
