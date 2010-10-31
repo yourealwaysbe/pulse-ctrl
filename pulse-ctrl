@@ -590,13 +590,12 @@ class AbsVolumeAdjuster:
 
     def doItem(self, sink):
         volume = self.getVolume()
-        absVol = str(volume * VolNormal / 100)
+        absVol = str(int(volume * VolNormal / 100))
         subprocess.Popen([Pacmd, self.PacmdSetCommand, sink.idnum, absVol]).wait()
 
     def getVolume(self):
         volume = ""
         if (len(self.argv) <= self.VolumePCIndex):
-            print("Volume: ")
             volume = int(input("Volume: "))
         else:
             volume = self.argv[self.VolumePCIndex]
