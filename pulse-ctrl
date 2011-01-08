@@ -13,6 +13,7 @@ PacmdMuted = "yes"
 PacmdMoveSinkInput = "move-sink-input"
 PacmdSetSinkVolume = "set-sink-volume"
 PacmdSetSinkInputVolume = "set-sink-input-volume"
+PacmdUnloadModule = "unload-module"
 
 ItemsAll = "all"
 SinkDefaultName = "default"
@@ -25,24 +26,27 @@ Null = 0
 ########################################################
 
 class Sink:
-    def __init__(self, idnum, name, muted, volume):
+    def __init__(self, idnum, name, muted, volume, module_no):
         self.idnum = idnum
         self.name = name
         self.muted = muted
         self.volume = volume
+        self.module_no = module_no
 
 class SinkInput:
-    def __init__(self, idnum, appName, muted, volume, sink):
+    def __init__(self, idnum, appName, muted, volume, sink, module_no):
         self.idnum = idnum
         self.appName = appName 
         self.muted = muted
         self.volume = volume
         self.sink = sink
+        self.module_no = module_no
 
 ####################################################
 
 class PulseInfo:
     PulseBufSize = 1000
+
 
     SinkRE = re.compile("Sink #([0-9]*)$")
     SinkIdGroup = 1
@@ -52,6 +56,9 @@ class PulseInfo:
     SinkMutedGroup = 1
     SinkVolumePCRE = re.compile("\s*Volume:.* ([0-9]*)%.*$")
     SinkVolumePCGroup = 1
+    SinkOwnerModuleRE = re.compile("\s*Owner Module:.* ([0-9]*)$")
+    SinkOwnerModuleGroup = 1
+
 
     SinkInputRE = re.compile("Sink Input #([0-9]*)$")
     SinkInputIdGroup = 1
@@ -63,6 +70,8 @@ class PulseInfo:
     SinkInputVolumePCGroup = SinkVolumePCGroup
     SinkInputSinkRE = re.compile("\s*Sink: ([0-9]*)$")
     SinkInputSinkGroup = 1
+    SinkInputOwnerModuleRE = re.compile("\s*Owner Module:.* ([0-9]*)$")
+    SinkInputOwnerModuleGroup = 1
     DefaultSinkRE = re.compile("set-default-sink (.*)$")
     DefaultSinkGroup = 1
 
@@ -106,9 +115,11 @@ class PulseInfo:
         name = ""
         muted = ""
         volume = ""
+        module_no = ""
         while ((name == "") or 
                (muted == "") or
-               (volume == "")): 
+               (volume == "") or
+               (module_no == "")): 
             line = rawData.readline().decode("utf-8")
             name = self.condMatchReg(name, 
                                      line, 
@@ -122,10 +133,15 @@ class PulseInfo:
                                        line, 
                                        self.SinkVolumePCRE, 
                                        self.SinkVolumePCGroup)
+            module_no = self.condMatchReg(module_no, 
+                                          line, 
+                                          self.SinkOwnerModuleRE,
+                                          self.SinkOwnerModuleGroup)
         self.sinks.append(Sink(idnum, 
                                name, 
                                muted == PacmdMuted,
-                               volume))
+                               volume,
+                               module_no))
 
 
     def processSinkInput(self, idnum, rawData):
@@ -133,10 +149,12 @@ class PulseInfo:
         muted = ""
         volume = ""
         sink = ""
+        module_no = ""
         while ((appName == "") or
                (muted == "") or
                (volume == "") or
-               (sink == "")):
+               (sink == "") or
+               (module_no == "")):
             line = rawData.readline().decode("utf-8")
             appName = self.condMatchReg(appName, 
                                         line, 
@@ -154,11 +172,16 @@ class PulseInfo:
                                      line, 
                                      self.SinkInputSinkRE, 
                                      self.SinkInputSinkGroup)
+            module_no = self.condMatchReg(module_no, 
+                                          line, 
+                                          self.SinkInputOwnerModuleRE,
+                                          self.SinkInputOwnerModuleGroup)
         self.sinkInputs.append(SinkInput(idnum, 
                                          appName, 
                                          muted == PacmdMuted, 
                                          volume,
-                                         sink))
+                                         sink,
+                                         module_no))
 
     def processDefaultSink(self):
         # assumes we've run processSinksAndInputs, but if we don't have
@@ -263,6 +286,8 @@ class Actioneer:
                 sys.stdout.write(" [mute]")
             sys.stdout.write(", Sink: ")
             sys.stdout.write(sinkInput.sink)
+            sys.stdout.write(", Module: ")
+            sys.stdout.write(sinkInput.module_no)
             sys.stdout.write(")\n")
 
     def printSinks(self):
@@ -282,6 +307,8 @@ class Actioneer:
                 sys.stdout.write(" [mute]")
             if sink.name == defaultSinkName:
                 sys.stdout.write(", Default")
+            sys.stdout.write(", Module: ")
+            sys.stdout.write(sink.module_no)
             sys.stdout.write(")\n")
 
     def askSink(self):
@@ -714,6 +741,31 @@ class SinkInputSinker(Actioneer):
         else:
             print("Unknown sink or sink input.")
 
+########################################################
+
+class SinkRemover(SinkAdjuster):
+    Command = "remove-sink"
+    Options = "sink_name1 sink_name2 ..."
+    Does = "Removes sink_name1 sink_name2 by unloading associated modules."
+
+    def doItem(self, sink):
+        if not (sink == Null): 
+            subprocess.Popen([Pacmd, 
+                             PacmdUnloadModule, 
+                             sink.module_no]).wait()
+
+########################################################
+
+class SinkInputRemover(SinkInputAdjuster):
+    Command = "remove-sink-input"
+    Options = "sink_input_name1 sink_input_name2 ..."
+    Does = "Removes sink_input_name1 sink_input_name2 by unloading associated modules."
+
+    def doItem(self, sink_input):
+        if not (sink_input == Null): 
+            subprocess.Popen([Pacmd, 
+                              PacmdUnloadModule, 
+                              sink_input.module_no]).wait()
 
 ########################################################
 
@@ -730,7 +782,9 @@ ActioneerList = [SinkChanger,
                  HasSinkInput,
                  AbsSinkVolume,
                  AbsSinkInputVolume,
-                 SinkInputSinker]
+                 SinkInputSinker,
+                 SinkRemover,
+                 SinkInputRemover]
 
 ########################################################
 
