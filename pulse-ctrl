@@ -210,11 +210,11 @@ class PulseInfo:
 
     def getSinkByName(self, name):
         resSink = Null
-        if unicode(name) == unicode(SinkDefaultName):
+        if str(name) == str(SinkDefaultName):
             resSink = self.defaultSink
         else:
             for sink in self.sinks:
-                if unicode(sink.name) == unicode(name):
+                if str(sink.name) == str(name):
                     resSink = sink
                     break
         return resSink
@@ -222,7 +222,7 @@ class PulseInfo:
     def getSinkByIdnum(self, idnum):
         resSink = Null
         for sink in self.sinks:
-            if unicode(sink.idnum) == unicode(idnum):
+            if str(sink.idnum) == str(idnum):
                 resSink = sink
                 break
         return resSink
@@ -236,7 +236,7 @@ class PulseInfo:
     def getSinkInputByAppName(self, appName):
         resSinkInput = Null
         for sinkInput in self.sinkInputs:
-            if unicode(sinkInput.appName) == unicode(appName):
+            if str(sinkInput.appName) == str(appName):
                 resSinkInput = sinkInput
                 break
         return resSinkInput
@@ -244,7 +244,7 @@ class PulseInfo:
     def getSinkInputByIdnum(self, idnum):
         resSinkInput = Null
         for sinkInput in self.sinkInputs:
-            if unicode(sinkInput.idnum) == unicode(idnum):
+            if str(sinkInput.idnum) == str(idnum):
                 resSinkInput = sinkInput
                 break
         return resSinkInput
