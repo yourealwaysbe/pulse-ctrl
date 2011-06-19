@@ -48,31 +48,31 @@ class PulseInfo:
     PulseBufSize = 1000
 
 
-    SinkRE = re.compile("Sink #([0-9]*)$")
-    SinkIdGroup = 1
-    SinkNameRE = re.compile("\s*Name: (.*)$")
-    SinkNameGroup = 1
-    SinkMutedRE = re.compile("\s*Mute: (.*)$")
-    SinkMutedGroup = 1
-    SinkVolumePCRE = re.compile("\s*Volume:.* ([0-9]*)%.*$")
-    SinkVolumePCGroup = 1
-    SinkOwnerModuleRE = re.compile("\s*Owner Module:.* ([0-9]*)$")
-    SinkOwnerModuleGroup = 1
+    SinkRE = re.compile("(Sink|Destination)\s*#([0-9]*)$",re.UNICODE)
+    SinkIdGroup = 2
+    SinkNameRE = re.compile("\s*(Name|Nom\s*):\s*(.*)$",re.UNICODE)
+    SinkNameGroup = 2
+    SinkMutedRE = re.compile("\s*(Mute|Muet\s*):\s*(.*)$",re.UNICODE)
+    SinkMutedGroup = 2
+    SinkVolumePCRE = re.compile("\s*(Volume|Volume\s*):.*[^0-9]([0-9]+)%.*$",re.UNICODE)
+    SinkVolumePCGroup = 2
+    SinkOwnerModuleRE = re.compile("\s*(Owner\s*Module|Module\s*propri.*taire\s*):[^0-9]*([0-9]*)$",re.UNICODE)
+    SinkOwnerModuleGroup = 2
 
 
-    SinkInputRE = re.compile("Sink Input #([0-9]*)$")
-    SinkInputIdGroup = 1
-    SinkInputAppNameRE = re.compile("\s*application.name = \"(.*)\"$")
+    SinkInputRE = re.compile("(Sink\s*Input|Entr.*e\s*de\s*la\s*destination)\s*#([0-9]*)$",re.UNICODE)
+    SinkInputIdGroup = 2
+    SinkInputAppNameRE = re.compile("\s*application.name\s*=\s*\"(.*)\"$",re.UNICODE)
     SinkInputAppNameGroup = 1
     SinkInputMutedRE = SinkMutedRE
     SinkInputMutedGroup = SinkMutedGroup
     SinkInputVolumePCRE = SinkVolumePCRE
     SinkInputVolumePCGroup = SinkVolumePCGroup
-    SinkInputSinkRE = re.compile("\s*Sink: ([0-9]*)$")
-    SinkInputSinkGroup = 1
-    SinkInputOwnerModuleRE = re.compile("\s*Owner Module:.* ([0-9]*)$")
-    SinkInputOwnerModuleGroup = 1
-    DefaultSinkRE = re.compile("set-default-sink (.*)$")
+    SinkInputSinkRE = re.compile("\s*(Sink|Destination\s*):\s*([0-9]*)$",re.UNICODE)
+    SinkInputSinkGroup = 2
+    SinkInputOwnerModuleRE = SinkOwnerModuleRE
+    SinkInputOwnerModuleGroup = SinkOwnerModuleGroup
+    DefaultSinkRE = re.compile("set-default-sink\s*(.*)$",re.UNICODE)
     DefaultSinkGroup = 1
 
     def __init__(self):
@@ -210,11 +210,11 @@ class PulseInfo:
 
     def getSinkByName(self, name):
         resSink = Null
-        if name == SinkDefaultName:
+        if unicode(name) == unicode(SinkDefaultName):
             resSink = self.defaultSink
         else:
             for sink in self.sinks:
-                if sink.name == name:
+                if unicode(sink.name) == unicode(name):
                     resSink = sink
                     break
         return resSink
@@ -222,7 +222,7 @@ class PulseInfo:
     def getSinkByIdnum(self, idnum):
         resSink = Null
         for sink in self.sinks:
-            if sink.idnum == idnum:
+            if unicode(sink.idnum) == unicode(idnum):
                 resSink = sink
                 break
         return resSink
@@ -236,7 +236,7 @@ class PulseInfo:
     def getSinkInputByAppName(self, appName):
         resSinkInput = Null
         for sinkInput in self.sinkInputs:
-            if sinkInput.appName == appName:
+            if unicode(sinkInput.appName) == unicode(appName):
                 resSinkInput = sinkInput
                 break
         return resSinkInput
@@ -244,7 +244,7 @@ class PulseInfo:
     def getSinkInputByIdnum(self, idnum):
         resSinkInput = Null
         for sinkInput in self.sinkInputs:
-            if sinkInput.idnum == idnum:
+            if unicode(sinkInput.idnum) == unicode(idnum):
                 resSinkInput = sinkInput
                 break
         return resSinkInput
